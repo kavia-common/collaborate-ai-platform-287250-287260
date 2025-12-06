@@ -34,4 +34,26 @@ if (process.env.REDIS_URL) {
   pubsub = new PubSub();
 }
 
+// Ensure asyncIterator exists (Polyfill for environment issues)
+if (typeof pubsub.asyncIterator !== 'function') {
+    console.warn('⚠️ Polyfilling pubsub.asyncIterator');
+    try {
+        // Attempt to load the iterator class from the package
+        // This path is common for graphql-subscriptions
+        const { PubSubAsyncIterator } = require('graphql-subscriptions/dist/pubsub-async-iterator');
+        pubsub.asyncIterator = function(triggers) {
+            return new PubSubAsyncIterator(this, triggers);
+        };
+    } catch (e) {
+        console.error('❌ Failed to load PubSubAsyncIterator for polyfill:', e.message);
+        // Fallback: attempt to use the main package if it exports it (some versions do)
+        const pkg = require('graphql-subscriptions');
+        if (pkg.PubSubAsyncIterator) {
+             pubsub.asyncIterator = function(triggers) {
+                return new pkg.PubSubAsyncIterator(this, triggers);
+            };
+        }
+    }
+}
+
 module.exports = pubsub;

@@ -174,10 +174,28 @@ const resolvers = {
       if (projectId) filter.projectId = projectId;
       if (eventId) filter.eventId = eventId;
       
-      return await Message.find(filter)
+      const messages = await Message.find(filter)
         .sort({ createdAt: 1 }) 
         .skip(offset)
         .limit(limit);
+        
+      return messages || [];
+    },
+    // Alias for getMessages to satisfy schema 'messages' field
+    messages: async (_, args, context) => {
+      const user = checkAuth(context);
+      const { projectId, eventId, limit = 50, offset = 0 } = args;
+      const filter = { companyId: user.companyId };
+      
+      if (projectId) filter.projectId = projectId;
+      if (eventId) filter.eventId = eventId;
+      
+      const messages = await Message.find(filter)
+        .sort({ createdAt: 1 }) 
+        .skip(offset)
+        .limit(limit);
+
+      return messages || [];
     },
     getCompanyUsers: async (_, __, context) => {
       const user = checkAuth(context);
@@ -635,6 +653,22 @@ const resolvers = {
         });
 
         return chat;
+    },
+
+    updateTypingStatus: async (_, { chatId, isTyping }, context) => {
+        const user = checkAuth(context);
+        
+        const typingPayload = {
+            chatId,
+            user: user, // Pass full user object
+            isTyping
+        };
+
+        pubsub.publish('TYPING_STATUS', { 
+            typingChanged: typingPayload 
+        });
+
+        return true;
     }
   },
 

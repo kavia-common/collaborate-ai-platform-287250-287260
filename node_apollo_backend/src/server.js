@@ -12,8 +12,22 @@ const connectDB = require('./db');
 const { auth } = require('./middleware');
 const typeDefs = require('./graphql/typeDefs');
 const resolvers = require('./graphql/resolvers');
+const pubsub = require('./graphql/pubsub');
 
 const PORT = process.env.PORT || 3001;
+
+// Diagnostic check for PubSub
+console.log('--- PubSub Diagnostic ---');
+console.log('PubSub Instance:', pubsub ? pubsub.constructor.name : 'undefined');
+if (pubsub) {
+    console.log('Has asyncIterator:', typeof pubsub.asyncIterator);
+    if (typeof pubsub.asyncIterator !== 'function') {
+        console.error('CRITICAL: pubsub.asyncIterator is not a function!');
+    }
+} else {
+    console.error('CRITICAL: pubsub instance is undefined!');
+}
+console.log('-------------------------');
 
 /**
  * Shared context function to extract auth token and user
