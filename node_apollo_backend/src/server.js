@@ -38,6 +38,13 @@ const getContext = async ({ req, connectionParams }) => {
 
 // PUBLIC_INTERFACE
 async function startServer() {
+  console.log('Starting server...');
+  if (process.env.MONGODB_URI) {
+    console.log('MONGODB_URI is set, attempting connection...');
+  } else {
+    console.warn('MONGODB_URI is NOT set. Database features will fail.');
+  }
+
   // Create HTTP server from Express app
   const httpServer = createServer(app);
 

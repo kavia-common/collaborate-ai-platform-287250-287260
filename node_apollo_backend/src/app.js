@@ -20,7 +20,10 @@ const corsOptions = {
       process.env.FRONTEND_URL
     ].filter(Boolean);
 
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.cloud.kavia.ai')) {
+    // Check if origin matches allowed list or is a subdomain of cloud.kavia.ai (allowing ports)
+    const isAllowedDomain = origin.endsWith('.cloud.kavia.ai') || /^https:\/\/.*\.cloud\.kavia\.ai(:\d+)?$/.test(origin);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || isAllowedDomain) {
       callback(null, true);
     } else {
       console.log('Blocked by CORS:', origin);
