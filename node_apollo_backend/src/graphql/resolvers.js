@@ -639,7 +639,7 @@ const resolvers = {
             lastMessageAt: new Date()
         });
 
-        const populatedMessage = await message.populate(['sender', 'company']);
+        const populatedMessage = await message.populate(['sender']);
         
         // Fetch members to notify
         const members = await ChatMember.find({ chatId });
