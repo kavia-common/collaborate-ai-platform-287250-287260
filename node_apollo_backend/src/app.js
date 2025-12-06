@@ -1,6 +1,7 @@
 const cors = require('cors');
 const express = require('express');
 const routes = require('./routes');
+const aiRoutes = require('./routes/ai');
 const healthController = require('./controllers/health');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');
@@ -70,6 +71,7 @@ app.use(express.json({ limit: '10mb' }));
 // Mount routes
 // Deprecate or wrap existing REST routes
 app.use('/legacy', routes);
+app.use('/api/ai', aiRoutes);
 
 // Health endpoint
 app.get('/health', healthController.check.bind(healthController));
