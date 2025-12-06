@@ -236,7 +236,15 @@ const typeDefs = `#graphql
     deleteEvent(id: ID!): Boolean!
 
     # Messages
-    sendMessage(input: SendMessageInput!): Message!
+    # Supports both input object (legacy/strict) and flat arguments (frontend compatibility)
+    sendMessage(
+      input: SendMessageInput,
+      content: String,
+      chatId: ID,
+      projectId: ID,
+      eventId: ID,
+      attachments: [AttachmentInput]
+    ): Message!
     
     # Chats
     createGroupChat(name: String!, memberIds: [ID!]!): Chat!

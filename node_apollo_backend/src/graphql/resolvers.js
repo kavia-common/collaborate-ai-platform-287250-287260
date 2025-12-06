@@ -421,9 +421,12 @@ const resolvers = {
       return result.deletedCount > 0;
     },
 
-    sendMessage: async (_, { input }, context) => {
+    sendMessage: async (_, args, context) => {
       const user = checkAuth(context);
-      const { content, projectId, eventId, chatId, attachments } = input;
+      
+      // Normalize arguments: accept 'input' object OR flat arguments
+      const params = args.input || args;
+      const { content, projectId, eventId, chatId, attachments } = params;
 
       let targetChatId = chatId;
 
