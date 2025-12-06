@@ -3,6 +3,8 @@ const User = require('./User');
 const Project = require('./Project');
 const Event = require('./Event');
 const Message = require('./Message');
+const Chat = require('./Chat');
+const ChatMember = require('./ChatMember');
 
 // PUBLIC_INTERFACE
 /**
@@ -13,5 +15,7 @@ module.exports = {
   User,
   Project,
   Event,
-  Message
+  Message,
+  Chat,
+  ChatMember
 };

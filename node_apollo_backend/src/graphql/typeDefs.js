@@ -51,10 +51,51 @@ const typeDefs = `#graphql
     updatedAt: Date
   }
 
+  enum ChatType {
+    DIRECT
+    GROUP
+    PROJECT
+    EVENT
+  }
+
+  type Attachment {
+    url: String!
+    filename: String!
+    mimeType: String!
+    size: Int!
+  }
+
+  type ChatMember {
+    user: User!
+    role: String!
+    isMuted: Boolean!
+    lastReadAt: Date
+  }
+
+  type Chat {
+    id: ID!
+    type: ChatType!
+    name: String
+    members: [ChatMember!]!
+    lastMessage: Message
+    unreadCount: Int
+    createdAt: Date!
+    updatedAt: Date!
+  }
+
+  type TypingIndicator {
+    chatId: ID!
+    user: User!
+    isTyping: Boolean!
+  }
+
   type Message {
     id: ID!
-    content: String!
+    content: String
     sender: User!
+    chat: Chat
+    attachments: [Attachment!]
+    readBy: [User!]
     project: Project
     event: Event
     isAiGenerated: Boolean
@@ -124,8 +165,17 @@ const typeDefs = `#graphql
     attendeeIds: [ID!]
   }
 
+  input AttachmentInput {
+    url: String!
+    filename: String!
+    mimeType: String!
+    size: Int!
+  }
+
   input SendMessageInput {
-    content: String!
+    chatId: ID
+    content: String
+    attachments: [AttachmentInput]
     projectId: ID
     eventId: ID
   }
@@ -155,6 +205,12 @@ const typeDefs = `#graphql
     # Message Queries
     getMessages(projectId: ID, eventId: ID, limit: Int, offset: Int): [Message!]!
     
+    # Chat Queries
+    getChats: [Chat!]!
+    getChat(id: ID!): Chat
+    getChatMessages(chatId: ID!, limit: Int, offset: Int): [Message!]!
+    getDirectChat(userId: ID!): Chat!
+
     # Company Users (Admin/Manager utility)
     getCompanyUsers: [User!]!
   }
@@ -176,6 +232,14 @@ const typeDefs = `#graphql
 
     # Messages
     sendMessage(input: SendMessageInput!): Message!
+    
+    # Chats
+    createGroupChat(name: String!, memberIds: [ID!]!): Chat!
+    updateChatSettings(chatId: ID!, isMuted: Boolean!): ChatMember!
+    sendMessageToChat(chatId: ID!, content: String, attachments: [AttachmentInput]): Message!
+    markChatAsRead(chatId: ID!, messageId: ID!): Boolean!
+    getUploadUrl(filename: String!, mimeType: String!): String!
+    addMembersToChat(chatId: ID!, memberIds: [ID!]!): Chat!
 
     # AI
     aiAssist(input: AiAssistInput!): AIResponse!
@@ -184,6 +248,11 @@ const typeDefs = `#graphql
   type Subscription {
     messageAdded(projectId: ID, eventId: ID): Message!
     eventUpdated: Event!
+    
+    # Chat Subscriptions
+    messageAddedToChat: Message!
+    userTyping(chatId: ID!): TypingIndicator!
+    chatUpdated: Chat!
   }
 `;
 

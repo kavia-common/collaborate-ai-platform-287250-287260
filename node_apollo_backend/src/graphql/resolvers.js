@@ -6,7 +6,7 @@ const pubsub = require('./pubsub');
 const aiService = require('../services/ai');
 
 // Models
-const { User, Company, Project, Event, Message } = require('../models');
+const { User, Company, Project, Event, Message, Chat, ChatMember } = require('../models');
 
 // Constants
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
@@ -85,7 +85,39 @@ const resolvers = {
     sender: async (parent) => resolveReference(User, parent.senderId, parent.sender),
     project: async (parent) => resolveReference(Project, parent.projectId, parent.project),
     event: async (parent) => resolveReference(Event, parent.eventId, parent.event),
-    company: async (parent) => resolveReference(Company, parent.companyId, parent.company)
+    company: async (parent) => resolveReference(Company, parent.companyId, parent.company),
+    chat: async (parent) => resolveReference(Chat, parent.chatId, parent.chat),
+    readBy: async (parent) => {
+      // Find all members who have read up to this message or later
+      // This is a simplified logic. Real logic would compare message sequence/timestamps.
+      // For now, return empty or based on lastReadMessageId
+      return []; 
+    }
+  },
+
+  Chat: {
+    members: async (parent) => {
+      // Fetch ChatMembers for this chat
+      const members = await ChatMember.find({ chatId: parent._id }).populate('userId');
+      // Map ChatMember schema to GraphQL ChatMember type structure if needed
+      // GraphQL type: type ChatMember { user: User!, role: String!, isMuted: Boolean!, lastReadAt: Date }
+      // Mongoose schema: userId (ref User)
+      return members.map(m => ({
+        user: m.userId,
+        role: m.role,
+        isMuted: m.isMuted,
+        lastReadAt: m.lastReadAt
+      }));
+    },
+    lastMessage: async (parent) => resolveReference(Message, parent.lastMessage, null),
+    unreadCount: async (parent, _, context) => {
+      const user = context.user;
+      if (!user) return 0;
+      const membership = await ChatMember.findOne({ chatId: parent._id, userId: user.id });
+      if (!membership) return 0;
+      // TODO: Calculate unread count based on lastReadMessageId
+      return 0; 
+    }
   },
 
   Query: {
@@ -141,6 +173,74 @@ const resolvers = {
     getCompanyUsers: async (_, __, context) => {
       const user = checkAuth(context);
       return await User.find({ companyId: user.companyId });
+    },
+    
+    // Chat Queries
+    getChats: async (_, __, context) => {
+      const user = checkAuth(context);
+      // Find all chats where user is a member
+      const memberships = await ChatMember.find({ userId: user.id });
+      const chatIds = memberships.map(m => m.chatId);
+      return await Chat.find({ _id: { $in: chatIds }, companyId: user.companyId }).sort({ lastMessageAt: -1 });
+    },
+
+    getChat: async (_, { id }, context) => {
+      const user = checkAuth(context);
+      // Verify membership
+      const membership = await ChatMember.findOne({ chatId: id, userId: user.id });
+      if (!membership) throw new GraphQLError('Chat not found or access denied');
+      
+      return await Chat.findById(id);
+    },
+
+    getChatMessages: async (_, { chatId, limit = 50, offset = 0 }, context) => {
+      const user = checkAuth(context);
+      // Verify membership
+      const membership = await ChatMember.findOne({ chatId: chatId, userId: user.id });
+      if (!membership) throw new GraphQLError('Access denied');
+
+      return await Message.find({ chatId })
+        .sort({ createdAt: -1 }) // Usually recent first for chats
+        .skip(offset)
+        .limit(limit);
+    },
+
+    getDirectChat: async (_, { userId }, context) => {
+      const user = checkAuth(context);
+      
+      // Check for existing direct chat between these two
+      // This approach assumes only one DIRECT chat exists per pair
+      // We need to find a chat of type DIRECT where both users are members
+      
+      // 1. Find all chats user is in
+      const myMemberships = await ChatMember.find({ userId: user.id });
+      const myChatIds = myMemberships.map(m => m.chatId);
+
+      // 2. Find chats where target user is also a member, constrained by myChatIds
+      const targetMembership = await ChatMember.findOne({
+        chatId: { $in: myChatIds },
+        userId: userId
+      }).populate('chatId');
+
+      // Check if any of these are DIRECT
+      // Note: populate('chatId') might return null if chat deleted
+      if (targetMembership && targetMembership.chatId && targetMembership.chatId.type === 'DIRECT') {
+        return targetMembership.chatId;
+      }
+
+      // If not exists, create new one
+      const chat = await Chat.create({
+        companyId: user.companyId,
+        type: 'DIRECT',
+        members: [user.id, userId] // Temporary for logic, actually managed via ChatMember
+      });
+
+      await ChatMember.create([
+        { chatId: chat._id, userId: user.id, role: 'member' },
+        { chatId: chat._id, userId: userId, role: 'member' }
+      ]);
+
+      return chat;
     }
   },
 
@@ -276,9 +376,11 @@ const resolvers = {
         attendees: attendeeIds || []
       });
 
-      pubsub.publish('EVENT_UPDATED', { eventUpdated: event });
+      const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
+      
+      pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
 
-      return event;
+      return populatedEvent;
     },
 
     updateEvent: async (_, { input }, context) => {
@@ -297,9 +399,11 @@ const resolvers = {
 
       await event.save();
       
-      pubsub.publish('EVENT_UPDATED', { eventUpdated: event });
+      const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
+      
+      pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
 
-      return event;
+      return populatedEvent;
     },
 
     deleteEvent: async (_, { id }, context) => {
@@ -310,10 +414,17 @@ const resolvers = {
 
     sendMessage: async (_, { input }, context) => {
       const user = checkAuth(context);
-      const { content, projectId, eventId } = input;
+      const { content, projectId, eventId, chatId, attachments } = input;
 
-      if (!projectId && !eventId) {
-        throw new GraphQLError('Message must be attached to a project or event');
+      let targetChatId = chatId;
+
+      // Legacy support for projectId/eventId
+      if (!targetChatId) {
+        if (!projectId && !eventId) {
+          throw new GraphQLError('Message must be attached to a project, event or chat');
+        }
+        // For now, we allow creating a message without chatId if projectId/eventId exists
+        // But future migration should ensure a chat exists for every project/event
       }
 
       const message = await Message.create({
@@ -322,12 +433,34 @@ const resolvers = {
         companyId: user.companyId,
         projectId,
         eventId,
+        chatId: targetChatId,
+        attachments: attachments || [],
         isAiGenerated: false
       });
 
-      pubsub.publish('MESSAGE_ADDED', { messageAdded: message });
+      const populatedMessage = await message.populate(['sender', 'project', 'event', 'company']);
 
-      return message;
+      // Update Chat lastMessage
+      if (targetChatId) {
+         await Chat.findByIdAndUpdate(targetChatId, { 
+             lastMessage: message._id,
+             lastMessageAt: new Date()
+         });
+         
+         // Fetch members to notify
+         const members = await ChatMember.find({ chatId: targetChatId });
+         const memberIds = members.map(m => m.userId.toString());
+         
+         pubsub.publish('MESSAGE_ADDED_TO_CHAT', { 
+             messageAddedToChat: populatedMessage,
+             receiverIds: memberIds
+         });
+      }
+
+      // Legacy pubsub
+      pubsub.publish('MESSAGE_ADDED', { messageAdded: populatedMessage });
+
+      return populatedMessage;
     },
 
     aiAssist: async (_, { input }, context) => {
@@ -369,6 +502,127 @@ const resolvers = {
           extensions: { code: 'INTERNAL_SERVER_ERROR' }
         });
       }
+    },
+
+    // Chat Mutations
+    createGroupChat: async (_, { name, memberIds }, context) => {
+        const user = checkAuth(context);
+        
+        const chat = await Chat.create({
+            companyId: user.companyId,
+            type: 'GROUP',
+            name,
+            creatorId: user.id
+        });
+
+        // Add creator
+        const allMemberIds = [...new Set([user.id, ...memberIds])];
+        
+        const membersPayload = allMemberIds.map(uid => ({
+            chatId: chat._id,
+            userId: uid,
+            role: uid === user.id ? 'admin' : 'member'
+        }));
+
+        await ChatMember.insertMany(membersPayload);
+
+        return chat;
+    },
+
+    updateChatSettings: async (_, { chatId, isMuted }, context) => {
+        const user = checkAuth(context);
+        const member = await ChatMember.findOneAndUpdate(
+            { chatId, userId: user.id },
+            { isMuted },
+            { new: true }
+        );
+        if (!member) throw new GraphQLError('Member not found');
+        return member;
+    },
+
+    sendMessageToChat: async (_, { chatId, content, attachments }, context) => {
+        const user = checkAuth(context);
+        
+        // Verify membership
+        const membership = await ChatMember.findOne({ chatId, userId: user.id });
+        if (!membership) throw new GraphQLError('Access denied');
+
+        const message = await Message.create({
+            content,
+            chatId,
+            senderId: user.id,
+            companyId: user.companyId,
+            attachments: attachments || [],
+            isAiGenerated: false
+        });
+
+        await Chat.findByIdAndUpdate(chatId, { 
+            lastMessage: message._id,
+            lastMessageAt: new Date()
+        });
+
+        const populatedMessage = await message.populate(['sender', 'company']);
+        
+        // Fetch members to notify
+        const members = await ChatMember.find({ chatId });
+        const memberIds = members.map(m => m.userId.toString());
+
+        pubsub.publish('MESSAGE_ADDED_TO_CHAT', { 
+            messageAddedToChat: populatedMessage,
+            receiverIds: memberIds
+        });
+
+        return populatedMessage;
+    },
+
+    markChatAsRead: async (_, { chatId, messageId }, context) => {
+        const user = checkAuth(context);
+        await ChatMember.findOneAndUpdate(
+            { chatId, userId: user.id },
+            { lastReadMessageId: messageId, lastReadAt: new Date() }
+        );
+        return true;
+    },
+
+    getUploadUrl: async (_, { filename, mimeType }, context) => {
+        checkAuth(context);
+        // Mock implementation for development
+        return `https://mock-storage.example.com/uploads/${Date.now()}_${filename}`;
+    },
+
+    addMembersToChat: async (_, { chatId, memberIds }, context) => {
+        const user = checkAuth(context);
+        // Verify admin
+        const adminMember = await ChatMember.findOne({ chatId, userId: user.id, role: 'admin' });
+        if (!adminMember) throw new GraphQLError('Only admins can add members');
+
+        const newMembers = memberIds.map(uid => ({
+            chatId,
+            userId: uid,
+            role: 'member'
+        }));
+
+        // Avoid duplicates (simplified)
+        for (const m of newMembers) {
+            try {
+                await ChatMember.create(m);
+            } catch (e) {
+                // Ignore duplicate key errors
+            }
+        }
+        
+        const chat = await Chat.findById(chatId);
+        
+        // Publish chat updated event
+        const members = await ChatMember.find({ chatId });
+        const allMemberIds = members.map(m => m.userId.toString());
+        
+        pubsub.publish('CHAT_UPDATED', { 
+            chatUpdated: chat,
+            memberIds: allMemberIds
+        });
+
+        return chat;
     }
   },
 
@@ -418,6 +672,40 @@ const resolvers = {
         }
       ),
     },
+
+    messageAddedToChat: {
+      subscribe: withFilter(
+        () => pubsub.asyncIterator(['MESSAGE_ADDED_TO_CHAT']),
+        (payload, variables, context) => {
+            const { receiverIds } = payload;
+            const user = context.user;
+            if (!user) return false;
+            return receiverIds.includes(user.id);
+        }
+      )
+    },
+    
+    userTyping: {
+      subscribe: withFilter(
+        () => pubsub.asyncIterator(['TYPING_STATUS']),
+        (payload, variables, context) => {
+            // Simplified: allow if user is in chat
+            return true; 
+        }
+      )
+    },
+    
+    chatUpdated: {
+      subscribe: withFilter(
+        () => pubsub.asyncIterator(['CHAT_UPDATED']),
+        (payload, variables, context) => {
+            const { memberIds } = payload;
+            const user = context.user;
+            if (!user) return false;
+            return memberIds.includes(user.id);
+        }
+      )
+    }
   },
 };
 
