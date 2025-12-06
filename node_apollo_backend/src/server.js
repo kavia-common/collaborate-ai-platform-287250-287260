@@ -75,6 +75,10 @@ async function startServer() {
   // Initialize Apollo Server
   const server = new ApolloServer({
     schema,
+    formatError: (formattedError, error) => {
+      console.log('GraphQL Error:', formattedError);
+      return formattedError;
+    },
     plugins: [
       // Proper shutdown for the HTTP server
       ApolloServerPluginDrainHttpServer({ httpServer }),
