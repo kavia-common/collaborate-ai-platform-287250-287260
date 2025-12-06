@@ -108,7 +108,10 @@ async function startServer() {
 
   // 404 catch-all
   app.use((req, res) => {
-    console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
+    // Don't log 404 for favicon or common accidental hits to reduce noise
+    if (req.originalUrl !== '/favicon.ico') {
+        console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
+    }
     res.status(404).json({ status: 'error', message: 'Route not found', path: req.originalUrl });
   });
 

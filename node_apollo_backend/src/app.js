@@ -64,7 +64,8 @@ app.use('/docs', swaggerUi.serve, (req, res, next) => {
 });
 
 // Parse JSON request body
-app.use(express.json());
+// Increased limit to support larger GQL queries/mutations
+app.use(express.json({ limit: '10mb' }));
 
 // Mount routes
 // Deprecate or wrap existing REST routes
