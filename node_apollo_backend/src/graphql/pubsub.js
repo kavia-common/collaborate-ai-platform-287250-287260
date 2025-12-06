@@ -61,6 +61,7 @@ try {
     const iter = pubsub.asyncIterator(['STARTUP_CHECK']);
     if (iter && typeof iter.next === 'function') {
         console.log('✅ PubSub.asyncIterator passes basic functionality check.');
+        console.log('✅ Subscription System: READY');
     } else {
         console.error('❌ PubSub.asyncIterator returned invalid iterator object.');
     }
