@@ -7,6 +7,9 @@ const pubsub = require('./pubsub');
 // Models
 const { User, Company, Project, Event, Message } = require('../models');
 
+// Constants
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+
 // Helper to check auth
 const checkAuth = (context) => {
   if (!context.user) {
@@ -20,44 +23,81 @@ const checkAuth = (context) => {
   return context.user;
 };
 
+// Field Resolvers Helpers
+// Checks if the field is populated (is an object with an ID), otherwise fetches it.
+const resolveReference = async (model, id, populatedObject) => {
+    if (populatedObject && (populatedObject.id || populatedObject._id)) {
+        return populatedObject;
+    }
+    if (!id) return null;
+    return await model.findById(id);
+};
+
 const resolvers = {
   Date: {
-    // Basic scalar implementation for Date if not using a library like graphql-scalars
-    // For simplicity here assuming input is ISO string or timestamp, output is ISO string
     __parseValue(value) {
-      return new Date(value); // value from the client
+      return new Date(value);
     },
     __serialize(value) {
-      return value.toISOString(); // value sent to the client
+      return value.toISOString();
     },
     __parseLiteral(ast) {
       if (ast.kind === 'StringValue') {
-        return new Date(ast.value); // ast value is always in string format
+        return new Date(ast.value);
       }
       return null;
     },
   },
 
+  // Field Resolvers to handle unpopulated fields dynamically
+  User: {
+    company: async (parent) => resolveReference(Company, parent.companyId, parent.company)
+  },
+  Project: {
+    owner: async (parent) => resolveReference(User, parent.ownerId, parent.owner),
+    company: async (parent) => resolveReference(Company, parent.companyId, parent.company),
+    members: async (parent) => {
+        if (parent.members && parent.members.length > 0 && (parent.members[0].id || parent.members[0]._id)) {
+            return parent.members;
+        }
+        if (!parent.members || parent.members.length === 0) return [];
+        return await User.find({ _id: { $in: parent.members } });
+    }
+  },
+  Event: {
+    organizer: async (parent) => resolveReference(User, parent.organizerId, parent.organizer),
+    project: async (parent) => resolveReference(Project, parent.projectId, parent.project),
+    company: async (parent) => resolveReference(Company, parent.companyId, parent.company),
+    attendees: async (parent) => {
+        if (parent.attendees && parent.attendees.length > 0 && (parent.attendees[0].id || parent.attendees[0]._id)) {
+            return parent.attendees;
+        }
+        if (!parent.attendees || parent.attendees.length === 0) return [];
+        return await User.find({ _id: { $in: parent.attendees } });
+    }
+  },
+  Message: {
+    sender: async (parent) => resolveReference(User, parent.senderId, parent.sender),
+    project: async (parent) => resolveReference(Project, parent.projectId, parent.project),
+    event: async (parent) => resolveReference(Event, parent.eventId, parent.event),
+    company: async (parent) => resolveReference(Company, parent.companyId, parent.company)
+  },
+
   Query: {
     me: async (_, __, context) => {
       const user = checkAuth(context);
-      return await User.findById(user.id).populate('company');
+      return await User.findById(user.id);
     },
     getProjects: async (_, { status }, context) => {
       const user = checkAuth(context);
       const filter = { companyId: user.companyId };
       if (status) filter.status = status;
-      return await Project.findById(filter).populate('owner').populate('members').populate('company');
-      // Note: The first argument to find should be the filter object directly
-      // Correction: Project.find(filter) not findById(filter)
-      return await Project.find(filter).populate('owner').populate('members').populate('company').sort({ createdAt: -1 });
+      // Using sort to show newest first
+      return await Project.find(filter).sort({ createdAt: -1 });
     },
     getProject: async (_, { id }, context) => {
       const user = checkAuth(context);
-      const project = await Project.findOne({ _id: id, companyId: user.companyId })
-        .populate('owner')
-        .populate('members')
-        .populate('company');
+      const project = await Project.findOne({ _id: id, companyId: user.companyId });
       if (!project) throw new GraphQLError('Project not found');
       return project;
     },
@@ -72,20 +112,11 @@ const resolvers = {
         if (startBefore) filter.startTime.$lte = new Date(startBefore);
       }
 
-      return await Event.find(filter)
-        .populate('organizer')
-        .populate('attendees')
-        .populate('project')
-        .populate('company')
-        .sort({ startTime: 1 });
+      return await Event.find(filter).sort({ startTime: 1 });
     },
     getEvent: async (_, { id }, context) => {
       const user = checkAuth(context);
-      const event = await Event.findOne({ _id: id, companyId: user.companyId })
-        .populate('organizer')
-        .populate('attendees')
-        .populate('project')
-        .populate('company');
+      const event = await Event.findOne({ _id: id, companyId: user.companyId });
       if (!event) throw new GraphQLError('Event not found');
       return event;
     },
@@ -93,27 +124,17 @@ const resolvers = {
       const user = checkAuth(context);
       const filter = { companyId: user.companyId };
       
-      // Must specify context for messages usually, or get all for company (dangerous for large datasets)
-      // For now allow filtering by either
       if (projectId) filter.projectId = projectId;
       if (eventId) filter.eventId = eventId;
       
-      if (!projectId && !eventId) {
-          // Optional: restrict if neither is provided
-      }
-
       return await Message.find(filter)
-        .populate('sender')
-        .populate('project')
-        .populate('event')
-        .populate('company')
-        .sort({ createdAt: 1 }) // Chronological for chat
+        .sort({ createdAt: 1 }) 
         .skip(offset)
         .limit(limit);
     },
     getCompanyUsers: async (_, __, context) => {
       const user = checkAuth(context);
-      return await User.find({ companyId: user.companyId }).populate('company');
+      return await User.find({ companyId: user.companyId });
     }
   },
 
@@ -121,7 +142,6 @@ const resolvers = {
     register: async (_, { input }) => {
       const { username, email, password, companyName } = input;
 
-      // Check existing user
       const existingUser = await User.findOne({ email });
       if (existingUser) {
         throw new GraphQLError('User already exists with this email', {
@@ -129,16 +149,13 @@ const resolvers = {
         });
       }
 
-      // Create Company
       const newCompany = await Company.create({
         name: companyName,
         settings: { theme: 'default' }
       });
 
-      // Hash Password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create User (Admin)
       const newUser = await User.create({
         username,
         email,
@@ -147,14 +164,12 @@ const resolvers = {
         role: 'admin'
       });
 
-      // Generate Token
       const token = jwt.sign(
         { id: newUser._id, companyId: newUser.companyId, role: newUser.role, email: newUser.email },
-        process.env.JWT_SECRET || 'fallback_secret', // Should use env var
+        JWT_SECRET,
         { expiresIn: '7d' }
       );
 
-      // Populate company for return
       newUser.company = newCompany;
 
       return {
@@ -182,12 +197,9 @@ const resolvers = {
 
       const token = jwt.sign(
         { id: user._id, companyId: user.companyId, role: user.role, email: user.email },
-        process.env.JWT_SECRET || 'fallback_secret',
+        JWT_SECRET,
         { expiresIn: '7d' }
       );
-
-      // Populate company manually or fetch
-      await user.populate('company');
 
       return {
         token,
@@ -210,7 +222,7 @@ const resolvers = {
         members: memberIds || []
       });
 
-      return await project.populate(['owner', 'members', 'company']);
+      return project;
     },
 
     updateProject: async (_, { input }, context) => {
@@ -221,11 +233,10 @@ const resolvers = {
       if (!project) throw new GraphQLError('Project not found');
 
       Object.assign(project, updates);
-      // Handle members update specifically if needed (replace or add), simplistic here:
       if (updates.memberIds) project.members = updates.memberIds;
 
       await project.save();
-      return await project.populate(['owner', 'members', 'company']);
+      return project;
     },
 
     deleteProject: async (_, { id }, context) => {
@@ -251,9 +262,9 @@ const resolvers = {
         attendees: attendeeIds || []
       });
 
+      // Need to populate for subscription payload to be useful
       const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
       
-      // Notify subscribers
       pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
 
       return populatedEvent;
@@ -273,7 +284,6 @@ const resolvers = {
       
       const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
       
-      // Notify subscribers
       pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
 
       return populatedEvent;
@@ -304,7 +314,6 @@ const resolvers = {
 
       const populatedMessage = await message.populate(['sender', 'project', 'event', 'company']);
 
-      // Publish to subscriptions
       pubsub.publish('MESSAGE_ADDED', { messageAdded: populatedMessage });
 
       return populatedMessage;
@@ -317,14 +326,12 @@ const resolvers = {
         () => pubsub.asyncIterator(['MESSAGE_ADDED']),
         (payload, variables, context) => {
           const { messageAdded } = payload;
-          const user = context.user; // Context user from onConnect/connectionParams
+          const user = context.user;
 
-          // 1. Security: User must belong to the same company
           if (!user || messageAdded.companyId.toString() !== user.companyId) {
             return false;
           }
 
-          // 2. Context filtering: Project or Event
           if (variables.projectId && messageAdded.projectId) {
             return messageAdded.projectId.toString() === variables.projectId;
           }
@@ -332,9 +339,6 @@ const resolvers = {
             return messageAdded.eventId.toString() === variables.eventId;
           }
 
-          // If no filter variables provided, maybe stream all company messages? 
-          // Or enforce filtering. Let's enforce strictly what matches.
-          // If client sends NO variables, they get everything for their company (chatty but simple)
           if (!variables.projectId && !variables.eventId) {
             return true;
           }
@@ -350,7 +354,6 @@ const resolvers = {
           const { eventUpdated } = payload;
           const user = context.user;
 
-          // Security: Same company
           if (!user || eventUpdated.companyId.toString() !== user.companyId) {
             return false;
           }
