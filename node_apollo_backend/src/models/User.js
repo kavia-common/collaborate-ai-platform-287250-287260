@@ -40,7 +40,6 @@ const userSchema = new Schema({
 });
 
 // Indexes for performance and lookups
-userSchema.index({ email: 1 });
 userSchema.index({ companyId: 1 });
 
 // PUBLIC_INTERFACE
