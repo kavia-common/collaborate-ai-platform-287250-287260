@@ -10,6 +10,8 @@ const cors = require('cors');
 const app = require('./app');
 const connectDB = require('./db');
 const { auth } = require('./middleware');
+const typeDefs = require('./graphql/typeDefs');
+const resolvers = require('./graphql/resolvers');
 
 const PORT = process.env.PORT || 3001;
 
@@ -46,33 +48,6 @@ async function startServer() {
 
   // Create HTTP server from Express app
   const httpServer = createServer(app);
-
-  // minimal schema and resolvers
-  const typeDefs = `#graphql
-    type Query {
-      hello: String
-      health: String
-    }
-    type Subscription {
-      serverStatus: String
-    }
-  `;
-
-  const resolvers = {
-    Query: {
-      hello: () => 'Hello from Apollo Server',
-      health: () => 'OK',
-    },
-    Subscription: {
-      serverStatus: {
-        subscribe: async function* () {
-          yield { serverStatus: 'Connected' };
-          // Keep connection open
-          await new Promise(() => {}); 
-        },
-      },
-    },
-  };
 
   const schema = makeExecutableSchema({ typeDefs, resolvers });
 
