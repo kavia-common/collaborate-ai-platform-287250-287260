@@ -1,12 +1,14 @@
 const { PubSub } = require('graphql-subscriptions');
 const { RedisPubSub } = require('graphql-redis-subscriptions');
 const Redis = require('ioredis');
-const { PubSubAsyncIterableIterator } = require('graphql-subscriptions/dist/pubsub-async-iterable-iterator');
+const { PubSubAsyncIterator } = require('graphql-subscriptions/dist/pubsub-async-iterator');
 
 let pubsub;
 
 console.log('Initializing PubSub...');
 
+// Factory function to create the AsyncIterator if missing
+// This acts as a robust polyfill
 const ensureAsyncIterator = (pubsubInstance) => {
     if (typeof pubsubInstance.asyncIterator === 'function') {
         console.log('✅ PubSub instance already has asyncIterator.');
@@ -15,10 +17,13 @@ const ensureAsyncIterator = (pubsubInstance) => {
 
     console.warn('⚠️ pubsub.asyncIterator is missing. Polyfilling...');
     
+    // Polyfill using the class from graphql-subscriptions
+    // We bind 'this' correctly to the pubsub instance
     pubsubInstance.asyncIterator = (triggers) => {
-        return new PubSubAsyncIterableIterator(pubsubInstance, triggers);
+        return new PubSubAsyncIterator(pubsubInstance, triggers);
     };
 
+    // Verify again
     if (typeof pubsubInstance.asyncIterator === 'function') {
         console.log('✅ Polyfill successful: asyncIterator attached.');
     } else {
@@ -30,7 +35,11 @@ if (process.env.REDIS_URL) {
   console.log('🚀 Using Redis PubSub');
   try {
     const options = {
-      retryStrategy: times => Math.min(times * 50, 2000)
+      retryStrategy: times => {
+        // Retry for 10 seconds max then fallback? 
+        // For now, simple retry logic
+        return Math.min(times * 50, 2000);
+      }
     };
     
     const publisher = new Redis(process.env.REDIS_URL, options);
@@ -44,6 +53,7 @@ if (process.env.REDIS_URL) {
     publisher.on('error', (err) => console.error('Redis Publisher Error:', err));
     subscriber.on('error', (err) => console.error('Redis Subscriber Error:', err));
     
+    // RedisPubSub usually has asyncIterator, but we check anyway
     ensureAsyncIterator(pubsub);
 
   } catch (err) {
@@ -57,6 +67,7 @@ if (process.env.REDIS_URL) {
   ensureAsyncIterator(pubsub);
 }
 
+// Global self-check on startup
 try {
     const iter = pubsub.asyncIterator(['STARTUP_CHECK']);
     if (iter && typeof iter.next === 'function') {
