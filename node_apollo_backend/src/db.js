@@ -8,9 +8,8 @@ const connectDB = async () => {
   const dbURI = process.env.MONGODB_URI;
 
   if (!dbURI) {
-    console.error('Error: MONGODB_URI not found in environment variables.');
-    // Throwing here to prevent server startup if configuration is missing
-    throw new Error('MONGODB_URI is not defined');
+    console.warn('Warning: MONGODB_URI not found in environment variables. Database features will be unavailable.');
+    return; // Don't throw, just return to allow server startup
   }
 
   const connect = async () => {
@@ -26,7 +25,8 @@ const connectDB = async () => {
     }
   };
 
-  await connect();
+  // Start connection loop but don't await it here so calling function doesn't block indefinitely
+  connect();
 };
 
 /**

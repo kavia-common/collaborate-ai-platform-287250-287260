@@ -38,16 +38,14 @@ const getContext = async ({ req, connectionParams }) => {
 
 // PUBLIC_INTERFACE
 async function startServer() {
-  // Ensure DB is connected before starting the server
-  try {
-    await connectDB();
-  } catch (error) {
-    console.error('Failed to initialize database connection:', error);
-    process.exit(1);
-  }
-
   // Create HTTP server from Express app
   const httpServer = createServer(app);
+
+  // Initialize DB connection in background (non-blocking)
+  connectDB().catch(error => {
+    console.error('Failed to initialize database connection:', error);
+    // process.exit(1); // Do not exit, keep server running for health checks
+  });
 
   const schema = makeExecutableSchema({ typeDefs, resolvers });
 
