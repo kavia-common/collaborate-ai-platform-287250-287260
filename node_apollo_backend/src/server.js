@@ -9,15 +9,16 @@ const { makeExecutableSchema } = require('@graphql-tools/schema');
 const cors = require('cors');
 const app = require('./app');
 const connectDB = require('./db');
+const { auth } = require('./middleware');
 
 const PORT = process.env.PORT || 3001;
 
 /**
- * Shared context function to extract auth token
+ * Shared context function to extract auth token and user
  * @param {Object} params - context params
  * @param {Object} [params.req] - HTTP request
  * @param {Object} [params.connectionParams] - WebSocket connection params
- * @returns {Object} context object with token
+ * @returns {Object} context object with user and token
  */
 const getContext = async ({ req, connectionParams }) => {
   let token = '';
@@ -28,7 +29,9 @@ const getContext = async ({ req, connectionParams }) => {
     // WebSocket
     token = connectionParams.authorization || connectionParams.authToken || '';
   }
-  return { token };
+
+  const user = auth.getUserFromToken(token);
+  return { user, token };
 };
 
 // PUBLIC_INTERFACE
