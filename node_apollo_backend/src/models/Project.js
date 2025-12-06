@@ -17,8 +17,11 @@ const projectSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['planning', 'active', 'completed', 'on_hold', 'archived'],
-    default: 'planning'
+    enum: {
+      values: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD', 'ARCHIVED', 'planning', 'active', 'completed', 'on_hold', 'archived'],
+      message: '{VALUE} is not a supported status. Supported values are: PLANNED, IN_PROGRESS, COMPLETED, ON_HOLD, ARCHIVED'
+    },
+    default: 'PLANNED'
   },
   startDate: {
     type: Date

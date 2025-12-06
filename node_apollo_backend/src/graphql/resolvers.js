@@ -223,7 +223,7 @@ const resolvers = {
       const project = await Project.create({
         title,
         description,
-        status: status || 'planning',
+        status: status || 'PLANNED',
         startDate,
         endDate,
         ownerId: user.id,
