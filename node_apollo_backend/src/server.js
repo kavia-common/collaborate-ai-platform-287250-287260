@@ -11,6 +11,26 @@ const app = require('./app');
 
 const PORT = process.env.PORT || 3001;
 
+/**
+ * Shared context function to extract auth token
+ * @param {Object} params - context params
+ * @param {Object} [params.req] - HTTP request
+ * @param {Object} [params.connectionParams] - WebSocket connection params
+ * @returns {Object} context object with token
+ */
+const getContext = async ({ req, connectionParams }) => {
+  let token = '';
+  if (req) {
+    // HTTP
+    token = req.headers.authorization || '';
+  } else if (connectionParams) {
+    // WebSocket
+    token = connectionParams.authorization || connectionParams.authToken || '';
+  }
+  return { token };
+};
+
+// PUBLIC_INTERFACE
 async function startServer() {
   // Create HTTP server from Express app
   const httpServer = createServer(app);
@@ -35,6 +55,8 @@ async function startServer() {
       serverStatus: {
         subscribe: async function* () {
           yield { serverStatus: 'Connected' };
+          // Keep connection open
+          await new Promise(() => {}); 
         },
       },
     },
@@ -48,7 +70,15 @@ async function startServer() {
     path: '/graphql',
   });
 
-  const serverCleanup = useServer({ schema }, wsServer);
+  const serverCleanup = useServer(
+    { 
+      schema,
+      context: async (ctx) => {
+        return getContext({ connectionParams: ctx.connectionParams });
+      }
+    }, 
+    wsServer
+  );
 
   // Initialize Apollo Server
   const server = new ApolloServer({
@@ -76,12 +106,7 @@ async function startServer() {
     '/graphql',
     cors(), // Allow CORS for GraphQL endpoint
     expressMiddleware(server, {
-      // Context placeholder for authentication
-      context: async ({ req }) => {
-        // Placeholder: Retrieve token from headers and verify
-        const token = req.headers.authorization || '';
-        return { token };
-      },
+      context: async ({ req }) => getContext({ req }),
     })
   );
 
