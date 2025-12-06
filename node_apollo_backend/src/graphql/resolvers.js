@@ -117,6 +117,13 @@ const resolvers = {
       if (!membership) return 0;
       // TODO: Calculate unread count based on lastReadMessageId
       return 0; 
+    },
+    participants: async (parent) => {
+        // Fetch members then populate users
+        // Use ChatMember model to find members of this chat
+        const members = await ChatMember.find({ chatId: parent._id });
+        const userIds = members.map(m => m.userId);
+        return await User.find({ _id: { $in: userIds } });
     }
   },
 
@@ -685,7 +692,7 @@ const resolvers = {
       )
     },
     
-    userTyping: {
+    typingChanged: {
       subscribe: withFilter(
         () => pubsub.asyncIterator(['TYPING_STATUS']),
         (payload, variables, context) => {

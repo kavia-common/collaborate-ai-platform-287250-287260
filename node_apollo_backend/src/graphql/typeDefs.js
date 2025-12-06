@@ -77,6 +77,7 @@ const typeDefs = `#graphql
     type: ChatType!
     name: String
     members: [ChatMember!]!
+    participants: [User!] # Added for frontend consistency
     lastMessage: Message
     unreadCount: Int
     createdAt: Date!
@@ -251,7 +252,7 @@ const typeDefs = `#graphql
     
     # Chat Subscriptions
     messageAddedToChat: Message!
-    userTyping(chatId: ID!): TypingIndicator!
+    typingChanged(chatId: ID!): TypingIndicator!
     chatUpdated: Chat!
   }
 `;
