@@ -1,18 +1,27 @@
 const cors = require('cors');
 const express = require('express');
 const routes = require('./routes');
+const healthController = require('./controllers/health');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('../swagger');
 
 // Initialize express app
 const app = express();
 
-app.use(cors({
-  origin: '*',
+// Configure CORS
+const corsOptions = {
+  origin: [
+    'http://localhost:3000', 
+    'https://studio.apollographql.com'
+  ],
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+app.use(cors(corsOptions));
 app.set('trust proxy', true);
+
 app.use('/docs', swaggerUi.serve, (req, res, next) => {
   const host = req.get('host');           // may or may not include port
   let protocol = req.protocol;          // http or https
@@ -42,6 +51,11 @@ app.use('/docs', swaggerUi.serve, (req, res, next) => {
 app.use(express.json());
 
 // Mount routes
-app.use('/', routes);
+// Deprecate or wrap existing REST routes
+app.use('/legacy', routes);
+
+// Health endpoint
+app.get('/health', healthController.check.bind(healthController));
+app.get('/', healthController.check.bind(healthController));
 
 module.exports = app;

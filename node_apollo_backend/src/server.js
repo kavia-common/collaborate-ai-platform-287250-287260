@@ -91,7 +91,7 @@ async function startServer() {
   // Apply middleware
   app.use(
     '/graphql',
-    cors(), // Allow CORS for GraphQL endpoint
+    // cors() is already applied globally in app.js with correct config
     expressMiddleware(server, {
       context: async ({ req }) => getContext({ req }),
     })
