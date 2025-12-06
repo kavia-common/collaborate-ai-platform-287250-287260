@@ -95,6 +95,11 @@ async function startServer() {
     })
   );
 
+  // 404 catch-all
+  app.use((req, res) => {
+    res.status(404).json({ status: 'error', message: 'Route not found' });
+  });
+
   // Re-attach error handling middleware at the end
   app.use((err, req, res, next) => {
     console.error(err.stack);
