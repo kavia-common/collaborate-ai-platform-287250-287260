@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { GraphQLError } = require('graphql');
 const { withFilter } = require('graphql-subscriptions');
 const pubsub = require('./pubsub');
+const aiService = require('../services/ai');
 
 // Models
 const { User, Company, Project, Event, Message } = require('../models');
@@ -332,6 +333,47 @@ const resolvers = {
       pubsub.publish('MESSAGE_ADDED', { messageAdded: populatedMessage });
 
       return populatedMessage;
+    },
+
+    aiAssist: async (_, { input }, context) => {
+      const user = checkAuth(context);
+      const { prompt, contextId, contextType } = input;
+
+      // Prepare context for the AI service
+      const contextData = { type: contextType };
+
+      // Verify ownership and existence of the context (Project or Event)
+      if (contextId) {
+        if (contextType === 'project') {
+          const project = await Project.findOne({ _id: contextId, companyId: user.companyId });
+          if (!project) {
+             throw new GraphQLError('Project context not found or access denied', {
+               extensions: { code: 'NOT_FOUND' }
+             });
+          }
+          contextData.title = project.title;
+          contextData.description = project.description;
+        } else if (contextType === 'event') {
+          const event = await Event.findOne({ _id: contextId, companyId: user.companyId });
+          if (!event) {
+             throw new GraphQLError('Event context not found or access denied', {
+               extensions: { code: 'NOT_FOUND' }
+             });
+          }
+          contextData.title = event.title;
+          contextData.description = event.description;
+        }
+      }
+
+      try {
+        const response = await aiService.generateResponse(prompt, contextData);
+        return response;
+      } catch (error) {
+        console.error('AI Service Error:', error);
+        throw new GraphQLError('Failed to generate AI response', {
+          extensions: { code: 'INTERNAL_SERVER_ERROR' }
+        });
+      }
     }
   },
 

@@ -127,6 +127,17 @@ const typeDefs = `#graphql
     eventId: ID
   }
 
+  type AIResponse {
+    content: String!
+    suggestedActions: [String]
+  }
+
+  input AiAssistInput {
+    prompt: String!
+    contextId: ID
+    contextType: String # 'project' or 'event'
+  }
+
   type Query {
     me: User
     
@@ -162,6 +173,9 @@ const typeDefs = `#graphql
 
     # Messages
     sendMessage(input: SendMessageInput!): Message!
+
+    # AI
+    aiAssist(input: AiAssistInput!): AIResponse!
   }
 
   type Subscription {
