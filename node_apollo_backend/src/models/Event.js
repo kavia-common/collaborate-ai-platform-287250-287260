@@ -27,6 +27,10 @@ const eventSchema = new Schema({
     type: String,
     trim: true
   },
+  meetingUrl: {
+    type: String,
+    trim: true
+  },
   isVirtual: {
     type: Boolean,
     default: false

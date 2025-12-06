@@ -260,7 +260,7 @@ const resolvers = {
 
     createEvent: async (_, { input }, context) => {
       const user = checkAuth(context);
-      const { title, description, startTime, endTime, location, isVirtual, projectId, attendeeIds } = input;
+      const { title, description, startTime, endTime, location, meetingUrl, isVirtual, projectId, attendeeIds } = input;
 
       const event = await Event.create({
         title,
@@ -268,6 +268,7 @@ const resolvers = {
         startTime,
         endTime,
         location,
+        meetingUrl,
         isVirtual,
         organizerId: user.id,
         companyId: user.companyId,

@@ -41,6 +41,7 @@ const typeDefs = `#graphql
     startTime: Date!
     endTime: Date!
     location: String
+    meetingUrl: String
     isVirtual: Boolean
     organizer: User!
     project: Project
@@ -104,6 +105,7 @@ const typeDefs = `#graphql
     startTime: Date!
     endTime: Date!
     location: String
+    meetingUrl: String
     isVirtual: Boolean
     projectId: ID
     attendeeIds: [ID!]
@@ -116,6 +118,7 @@ const typeDefs = `#graphql
     startTime: Date
     endTime: Date
     location: String
+    meetingUrl: String
     isVirtual: Boolean
     projectId: ID
     attendeeIds: [ID!]
