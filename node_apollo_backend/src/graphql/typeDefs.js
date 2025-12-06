@@ -205,6 +205,8 @@ const typeDefs = `#graphql
 
     # Message Queries
     getMessages(projectId: ID, eventId: ID, limit: Int, offset: Int): [Message!]!
+    # Alias for getMessages for compatibility
+    messages(projectId: ID, eventId: ID, limit: Int, offset: Int): [Message!]!
     
     # Chat Queries
     getChats: [Chat!]!
@@ -241,6 +243,7 @@ const typeDefs = `#graphql
     markChatAsRead(chatId: ID!, messageId: ID!): Boolean!
     getUploadUrl(filename: String!, mimeType: String!): String!
     addMembersToChat(chatId: ID!, memberIds: [ID!]!): Chat!
+    updateTypingStatus(chatId: ID!, isTyping: Boolean!): Boolean
 
     # AI
     aiAssist(input: AiAssistInput!): AIResponse!
