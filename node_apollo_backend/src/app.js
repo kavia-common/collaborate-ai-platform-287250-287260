@@ -10,10 +10,23 @@ const app = express();
 
 // Configure CORS
 const corsOptions = {
-  origin: [
-    'http://localhost:3000', 
-    'https://studio.apollographql.com'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://studio.apollographql.com',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
+
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.cloud.kavia.ai')) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
