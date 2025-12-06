@@ -23,6 +23,19 @@ if (pubsub) {
     console.log('Has asyncIterator:', typeof pubsub.asyncIterator);
     if (typeof pubsub.asyncIterator !== 'function') {
         console.error('CRITICAL: pubsub.asyncIterator is not a function!');
+    } else {
+        // Sanity check: Try to create an iterator
+        try {
+            const iter = pubsub.asyncIterator(['STARTUP_TEST']);
+            console.log('Sanity Call: asyncIterator returned', iter ? iter.constructor.name : 'null');
+            if (!iter || !iter.next) {
+                 console.error('CRITICAL: asyncIterator returned invalid object!');
+            } else {
+                 console.log('✅ PubSub Sanity Check Passed');
+            }
+        } catch (e) {
+            console.error('CRITICAL: PubSub Sanity Check Failed:', e);
+        }
     }
 } else {
     console.error('CRITICAL: pubsub instance is undefined!');
