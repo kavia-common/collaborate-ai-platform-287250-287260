@@ -216,6 +216,9 @@ const typeDefs = `#graphql
     getChatMessages(chatId: ID!, limit: Int, offset: Int): [Message!]!
     getDirectChat(userId: ID!): Chat!
 
+    # Company Context
+    myCompany: Company!
+
     # Company Users (Admin/Manager utility)
     getCompanyUsers: [User!]!
   }

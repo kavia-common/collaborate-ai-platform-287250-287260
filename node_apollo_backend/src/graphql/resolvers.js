@@ -201,6 +201,13 @@ const resolvers = {
       const user = checkAuth(context);
       return await User.find({ companyId: user.companyId });
     },
+
+    myCompany: async (_, __, context) => {
+      const user = checkAuth(context);
+      const company = await Company.findById(user.companyId);
+      if (!company) throw new GraphQLError('Company not found');
+      return company;
+    },
     
     // Chat Queries
     getChats: async (_, __, context) => {
@@ -448,13 +455,52 @@ const resolvers = {
 
       let targetChatId = chatId;
 
-      // Legacy support for projectId/eventId
+      // Legacy support for projectId/eventId: Locate or create chat context
       if (!targetChatId) {
-        if (!projectId && !eventId) {
+        if (projectId) {
+            // Try to find existing project chat
+            const chat = await Chat.findOne({ contextId: projectId, type: 'PROJECT' });
+            if (chat) {
+                targetChatId = chat._id;
+            } else {
+                // Verify project exists
+                const project = await Project.findOne({ _id: projectId, companyId: user.companyId });
+                if (project) {
+                    // Create new chat context
+                    const newChat = await Chat.create({
+                        companyId: user.companyId,
+                        type: 'PROJECT',
+                        name: project.title,
+                        contextId: projectId,
+                        creatorId: user.id
+                    });
+                    targetChatId = newChat._id;
+                    // Note: Members should ideally be synced here, but we'll rely on future syncing or admin action
+                }
+            }
+        } else if (eventId) {
+            // Try to find existing event chat
+            const chat = await Chat.findOne({ contextId: eventId, type: 'EVENT' });
+            if (chat) {
+                targetChatId = chat._id;
+            } else {
+                const event = await Event.findOne({ _id: eventId, companyId: user.companyId });
+                if (event) {
+                     const newChat = await Chat.create({
+                        companyId: user.companyId,
+                        type: 'EVENT',
+                        name: event.title,
+                        contextId: eventId,
+                        creatorId: user.id
+                    });
+                    targetChatId = newChat._id;
+                }
+            }
+        }
+        
+        if (!targetChatId && !projectId && !eventId) {
           throw new GraphQLError('Message must be attached to a project, event or chat');
         }
-        // For now, we allow creating a message without chatId if projectId/eventId exists
-        // But future migration should ensure a chat exists for every project/event
       }
 
       const message = await Message.create({
@@ -468,7 +514,9 @@ const resolvers = {
         isAiGenerated: false
       });
 
-      const populatedMessage = await message.populate(['sender', 'project', 'event', 'company']);
+      // REMOVED: 'company' from populate list because 'company' is not a field in Message schema (it is companyId).
+      // The 'company' field in GraphQL response is handled by the field resolver in resolvers.js.
+      const populatedMessage = await message.populate(['sender', 'project', 'event']);
 
       // Update Chat lastMessage
       if (targetChatId) {
