@@ -275,11 +275,9 @@ const resolvers = {
         attendees: attendeeIds || []
       });
 
-      const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
-      
-      pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
+      pubsub.publish('EVENT_UPDATED', { eventUpdated: event });
 
-      return populatedEvent;
+      return event;
     },
 
     updateEvent: async (_, { input }, context) => {
@@ -298,11 +296,9 @@ const resolvers = {
 
       await event.save();
       
-      const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
-      
-      pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
+      pubsub.publish('EVENT_UPDATED', { eventUpdated: event });
 
-      return populatedEvent;
+      return event;
     },
 
     deleteEvent: async (_, { id }, context) => {
@@ -328,11 +324,9 @@ const resolvers = {
         isAiGenerated: false
       });
 
-      const populatedMessage = await message.populate(['sender', 'project', 'event', 'company']);
+      pubsub.publish('MESSAGE_ADDED', { messageAdded: message });
 
-      pubsub.publish('MESSAGE_ADDED', { messageAdded: populatedMessage });
-
-      return populatedMessage;
+      return message;
     },
 
     aiAssist: async (_, { input }, context) => {
