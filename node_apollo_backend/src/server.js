@@ -8,6 +8,7 @@ const { ApolloServerPluginDrainHttpServer } = require('@apollo/server/plugin/dra
 const { makeExecutableSchema } = require('@graphql-tools/schema');
 const cors = require('cors');
 const app = require('./app');
+const connectDB = require('./db');
 
 const PORT = process.env.PORT || 3001;
 
@@ -32,6 +33,14 @@ const getContext = async ({ req, connectionParams }) => {
 
 // PUBLIC_INTERFACE
 async function startServer() {
+  // Ensure DB is connected before starting the server
+  try {
+    await connectDB();
+  } catch (error) {
+    console.error('Failed to initialize database connection:', error);
+    process.exit(1);
+  }
+
   // Create HTTP server from Express app
   const httpServer = createServer(app);
 
