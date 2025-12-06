@@ -98,7 +98,9 @@ const typeDefs = `#graphql
     attachments: [Attachment!]
     readBy: [User!]
     project: Project
+    projectId: ID
     event: Event
+    eventId: ID
     isAiGenerated: Boolean
     company: Company!
     createdAt: Date

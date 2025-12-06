@@ -83,6 +83,8 @@ const resolvers = {
   },
   Message: {
     sender: async (parent) => resolveReference(User, parent.senderId, parent.sender),
+    projectId: (parent) => parent.projectId || (parent.project && (parent.project.id || parent.project._id)),
+    eventId: (parent) => parent.eventId || (parent.event && (parent.event.id || parent.event._id)),
     project: async (parent) => resolveReference(Project, parent.projectId, parent.project),
     event: async (parent) => resolveReference(Event, parent.eventId, parent.event),
     company: async (parent) => resolveReference(Company, parent.companyId, parent.company),
