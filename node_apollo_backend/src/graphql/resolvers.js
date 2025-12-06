@@ -36,10 +36,14 @@ const resolveReference = async (model, id, populatedObject) => {
 const resolvers = {
   Date: {
     __parseValue(value) {
-      return new Date(value);
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        throw new GraphQLError('Invalid Date format');
+      }
+      return date;
     },
     __serialize(value) {
-      return value.toISOString();
+      return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
     },
     __parseLiteral(ast) {
       if (ast.kind === 'StringValue') {
@@ -124,6 +128,7 @@ const resolvers = {
       const user = checkAuth(context);
       const filter = { companyId: user.companyId };
       
+      // If neither is provided, it fetches company-wide messages (could be restricted if needed)
       if (projectId) filter.projectId = projectId;
       if (eventId) filter.eventId = eventId;
       
@@ -149,6 +154,7 @@ const resolvers = {
         });
       }
 
+      // Create Company
       const newCompany = await Company.create({
         name: companyName,
         settings: { theme: 'default' }
@@ -156,6 +162,7 @@ const resolvers = {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
+      // Create User
       const newUser = await User.create({
         username,
         email,
@@ -170,6 +177,7 @@ const resolvers = {
         { expiresIn: '7d' }
       );
 
+      // Manually populate company for return
       newUser.company = newCompany;
 
       return {
@@ -227,13 +235,17 @@ const resolvers = {
 
     updateProject: async (_, { input }, context) => {
       const user = checkAuth(context);
-      const { id, ...updates } = input;
+      const { id, memberIds, ...fieldUpdates } = input;
 
       const project = await Project.findOne({ _id: id, companyId: user.companyId });
       if (!project) throw new GraphQLError('Project not found');
 
-      Object.assign(project, updates);
-      if (updates.memberIds) project.members = updates.memberIds;
+      if (Object.keys(fieldUpdates).length > 0) {
+        Object.assign(project, fieldUpdates);
+      }
+      if (memberIds) {
+        project.members = memberIds;
+      }
 
       await project.save();
       return project;
@@ -262,7 +274,6 @@ const resolvers = {
         attendees: attendeeIds || []
       });
 
-      // Need to populate for subscription payload to be useful
       const populatedEvent = await event.populate(['organizer', 'attendees', 'project', 'company']);
       
       pubsub.publish('EVENT_UPDATED', { eventUpdated: populatedEvent });
@@ -272,13 +283,17 @@ const resolvers = {
 
     updateEvent: async (_, { input }, context) => {
       const user = checkAuth(context);
-      const { id, ...updates } = input;
+      const { id, attendeeIds, ...fieldUpdates } = input;
 
       const event = await Event.findOne({ _id: id, companyId: user.companyId });
       if (!event) throw new GraphQLError('Event not found');
 
-      Object.assign(event, updates);
-      if (updates.attendeeIds) event.attendees = updates.attendeeIds;
+      if (Object.keys(fieldUpdates).length > 0) {
+        Object.assign(event, fieldUpdates);
+      }
+      if (attendeeIds) {
+        event.attendees = attendeeIds;
+      }
 
       await event.save();
       
@@ -328,10 +343,12 @@ const resolvers = {
           const { messageAdded } = payload;
           const user = context.user;
 
+          // 1. Verify User matches Company
           if (!user || messageAdded.companyId.toString() !== user.companyId) {
             return false;
           }
 
+          // 2. Filter by Project or Event if requested
           if (variables.projectId && messageAdded.projectId) {
             return messageAdded.projectId.toString() === variables.projectId;
           }
@@ -339,6 +356,7 @@ const resolvers = {
             return messageAdded.eventId.toString() === variables.eventId;
           }
 
+          // If no specific filter requested, return true (firehose for company)
           if (!variables.projectId && !variables.eventId) {
             return true;
           }
@@ -354,6 +372,7 @@ const resolvers = {
           const { eventUpdated } = payload;
           const user = context.user;
 
+          // Verify User matches Company
           if (!user || eventUpdated.companyId.toString() !== user.companyId) {
             return false;
           }

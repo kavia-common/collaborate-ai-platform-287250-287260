@@ -9,23 +9,20 @@ const getUserFromToken = (token) => {
   if (!token) return null;
 
   try {
-    // Remove 'Bearer ' prefix if present
-    if (token.startsWith('Bearer ')) {
-      token = token.slice(7, token.length).trim();
+    // Remove 'Bearer ' prefix if present (case insensitive)
+    if (token.match(/^Bearer /i)) {
+      const parts = token.split(' ');
+      token = parts[parts.length - 1];
     }
 
     if (!token) return null;
 
     const secret = process.env.JWT_SECRET || 'fallback_secret';
-    // if (!secret) {
-    //   console.warn('JWT_SECRET is not defined in environment variables.');
-    //   return null;
-    // }
 
     const decoded = jwt.verify(token, secret);
 
     // Normalize and return user info
-    // Expecting payload to contain { id (or _id), companyId, role }
+    // Expecting payload to contain { id (or _id), companyId, role, email }
     return {
       id: decoded.id || decoded._id,
       companyId: decoded.companyId,
