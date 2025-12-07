@@ -23,9 +23,9 @@ exports.chat = async (req, res) => {
     }
 
     // Transform messages for Gemini
-    // Expecting: [{ role: 'user'|'assistant', content: '...' }]
+    // Expecting: [{ role: 'user'|'assistant'|'model', content: '...' }]
     const history = (messages || []).map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
+      role: (m.role === 'assistant' || m.role === 'model') ? 'model' : 'user',
       parts: [{ text: m.content }]
     }));
 
